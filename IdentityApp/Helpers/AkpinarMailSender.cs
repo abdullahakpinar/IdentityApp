@@ -10,22 +10,28 @@ using System.Threading.Tasks;
 
 namespace IdentityApp.Helpers
 {
-    public class AkpinarMailSender
+    internal class AkpinarMailSender
     {
-        private string _hostAddress;
-        private int _hostPost;
-        public AkpinarMailSender(string hostAddress, int hostPost)
+        private readonly string _hostAddress;
+        private readonly int _hostPost;
+
+        internal AkpinarMailSender(string hostAddress, int hostPost)
         {
             _hostAddress = hostAddress;
             _hostPost = hostPost;
         }
+
         private SmtpClient MailSenderCredential(string userName, string password, bool enableSSL)
         {
             try
             {
-                SmtpClient smtpClient = new SmtpClient(_hostAddress, _hostPost);
-                smtpClient.Credentials = new NetworkCredential(userName, password);
-                smtpClient.EnableSsl = enableSSL;
+                SmtpClient smtpClient = new SmtpClient(_hostAddress, _hostPost)
+                {
+                    Credentials = new NetworkCredential(userName, password),
+                    EnableSsl = enableSSL,
+                    UseDefaultCredentials = true,
+                    
+                };
                 return smtpClient;
             }
             catch (Exception ex)
@@ -33,6 +39,7 @@ namespace IdentityApp.Helpers
                 throw new Exception($"(MailSenderCredential)Mail gönderici ayarları yapılırken hata oluştu.\nHata : {ex.Message}");
             }
         }
+
         private void CheckRequiredField(SendMailRequest request)
         {
             if (string.IsNullOrEmpty(request.SenderMailAddress))
@@ -93,18 +100,22 @@ namespace IdentityApp.Helpers
                 }
             }
         }
-        private bool IsValidEmailWithRegex(string mailAddress)
+
+        private static bool IsValidEmailWithRegex(string mailAddress)
         {
             Regex regex = new Regex(@"^([\w\.\-]+)@([\w\-]+)((\.(\w){2,3})+)$");
             Match match = regex.Match(mailAddress);
             return match.Success;
         }
-        private MailMessage CreateMessage(SendMailRequest request)
+
+        private static MailMessage CreateMessage(SendMailRequest request)
         {
             try
             {
-                MailMessage mailMessage = new MailMessage();
-                mailMessage.From = new MailAddress(request.SenderMailAddress);
+                MailMessage mailMessage = new MailMessage
+                {
+                    From = new MailAddress(request.SenderMailAddress)
+                };
                 foreach (string mailTo in request.MailTo)
                 {
                     mailMessage.To.Add(mailTo);
@@ -138,23 +149,8 @@ namespace IdentityApp.Helpers
                 throw new Exception($"(CreateMessage)Mail oluşturulurken hata oluştu.\nHata : {ex.Message}");
             }
         }
-        private void AddToNotepad(string filePath, string content)
-        {
-            try
-            {
-                using (StreamWriter sWrite = new StreamWriter(filePath, true))
-                {
-                    sWrite.WriteLine(content);
-                    sWrite.WriteLine("\n");
-                    sWrite.Close();
-                }
-            }
-            catch (Exception ex)
-            {
-                throw new Exception("(AddToNotepad)Not deftarine kayıt yapılırken hata oluştu.\nHata : " + ex.Message);
-            }
-        }
-        public void SendMail(SendMailRequest request)
+
+        internal void SendMail(SendMailRequest request)
         {
             try
             {
@@ -168,5 +164,6 @@ namespace IdentityApp.Helpers
                 throw new Exception($"(SendMail)Mail gönderilirken hata oluştu.\nHata : {ex.Message}");
             }
         }
+
     }
 }

@@ -1,0 +1,43 @@
+﻿@model List<RoleApp>
+@{
+    ViewData["Title"] = "Roles";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<h3>Roller</h3>
+<hr />
+@if (ViewBag.Status != null)
+{
+    <div class="alert alert-info">@ViewBag.Status</div>
+}
+<table class="table table-bordered table-striped">
+    <tr>
+        <td>Düzenle</td>
+        <td>Role Id</td>
+        <td>Role Name</td>
+        <td>Sil</td>
+    </tr>
+    @if (Model == null || Model.Count < 1)
+    {
+        <tr>
+            <td colspan="3">Role bulunmamaktadır.</td>
+        </tr>
+    }
+    else
+    {
+        @foreach (RoleApp role in Model)
+        {
+            <tr>
+                <td><a asp-action="UpdateRole" asp-route-id="@role.Id" class="btn btn-primary">Düzenle</a></td>
+                <td>@role.Id</td>
+                <td>@role.Name</td>
+                <td>
+                    <form asp-action="DeleteRole" asp-route-id="@role.Id" method="post">
+                        <button class="btn btn-success" type="submit">Sil</button>
+                    </form>
+                </td>
+            </tr>
+        }
+    }
+</table>
+<a asp-action="CreateRole" class="btn btn-info">Rol Oluştur</a>

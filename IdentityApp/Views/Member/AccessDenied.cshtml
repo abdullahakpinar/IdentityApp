@@ -1,0 +1,15 @@
+﻿
+@{
+    ViewData["Title"] = "Erişim Kısıtı";
+    Layout = "~/Views/Shared/_MemberLayout.cshtml";
+}
+<div class="alert alert-danger">
+@if (!string.IsNullOrEmpty(ViewBag.Message))
+{
+    @ViewBag.Message
+}
+else
+{
+    <span>Erişim izniniz yoktur.</span>
+}
+</div>

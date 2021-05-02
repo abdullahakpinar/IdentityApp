@@ -11,10 +11,8 @@ namespace IdentityApp.Models
     {
         [MaxLength(75)]
         public string City { get; set; }
-
         public string PictureURL { get; set; }
         public DateTime? BirthDate { get; set; }
         public int Gender { get; set; }
-
     }
 }

@@ -1,5 +1,9 @@
+ï»¿using IdentityApp.ClaimProviders;
 using IdentityApp.CustomValidations;
 using IdentityApp.Models;
+using IdentityApp.Requirements;
+using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Http;
@@ -9,9 +13,6 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
 
 namespace IdentityApp
 {
@@ -29,10 +30,42 @@ namespace IdentityApp
 
         public void ConfigureServices(IServiceCollection services)
         {
+            services.AddTransient<IAuthorizationHandler, ExpireDateExchangeHandler>();
             services.AddDbContext<AppIdentityDbContext>(options =>
             {
                 options.UseSqlServer(Configuration.GetConnectionString("SqlConStr"));
             });
+
+            services.AddAuthorization(options =>
+            {
+                options.AddPolicy("SomeCityPolicy", policy =>
+                {
+                    policy.RequireClaim("city", "KOCAELÄ°");
+                });
+                options.AddPolicy("ViolencePolicy", policy =>
+                {
+                    policy.RequireClaim("violence");
+                });
+                options.AddPolicy("ExchangePolicy", policy =>
+                {
+                    policy.AddRequirements(new ExpireDateExchangeRequirement());
+                });
+            });
+
+            services.AddAuthentication().AddFacebook(options =>
+            {
+                options.AppId = Configuration["Authentication:Facebook:AppId"].ToString();
+                options.AppSecret = Configuration["Authentication:Facebook:AppSecret"].ToString();
+            }).AddGoogle(options =>
+            {
+                options.ClientId = Configuration["Authentication:Google:ClientId"].ToString();
+                options.ClientSecret = Configuration["Authentication:Google:ClientSecret"].ToString();
+            }).AddMicrosoftAccount(options =>
+            {
+                options.ClientId = Configuration["Authentication:Microsoft:ClientId"].ToString();
+                options.ClientSecret = Configuration["Authentication:Microsoft:ClientSecret"].ToString();
+            });
+
 
             services.AddIdentity<UserApp, RoleApp>(options =>
             {
@@ -44,7 +77,7 @@ namespace IdentityApp
 
 
                 options.User.RequireUniqueEmail = true;
-                options.User.AllowedUserNameCharacters = "abcçdefghýijklmnoöpqrsþtuüvwxyzABCÇDEFGHIÝJKLMNOÖPQRSÞTUÜVWXYZ0123456789-._";
+                options.User.AllowedUserNameCharacters = "abcÃ§defgÄŸhÄ±ijklmnoÃ¶pqrsÅŸtuÃ¼vwxyzABCÃ‡DEFGÄžHIÄ°JKLMNOÃ–PQRSÃžTUÃœVWXYZ0123456789-._";
 
 
             }).AddPasswordValidator<CustomPasswordValidator>().AddUserValidator<CustomUserValidator>().AddErrorDescriber<CustomIdentityErrorDescriber>().AddEntityFrameworkStores<AppIdentityDbContext>().AddDefaultTokenProviders();
@@ -52,7 +85,7 @@ namespace IdentityApp
             CookieBuilder cookieBuilder = new CookieBuilder
             {
                 Name = "MyWebSite",
-                HttpOnly = false, 
+                HttpOnly = false,
                 SameSite = SameSiteMode.Lax,  //SameSiteMode.Strict : Only this site
                 SecurePolicy = CookieSecurePolicy.SameAsRequest //CookieSecurePolicy.Always : Request is only HTTPS || CookieSecurePolicy.SameAsRequest : HTTP - HTTP OR HTTPS - HTTPS || CookieSecurePolicy.None : Only HTTP 
             };
@@ -61,10 +94,14 @@ namespace IdentityApp
             {
                 options.LoginPath = new PathString("/Home/LogIn");
                 options.LogoutPath = new PathString("/Member/LogOut");
+                options.AccessDeniedPath = new PathString("/Member/AccessDenied");
                 options.Cookie = cookieBuilder;
                 options.SlidingExpiration = true; // Expiration Time Half = Expiration Time Half + Expiration Time
                 options.ExpireTimeSpan = TimeSpan.FromDays(2);
             });
+
+
+            services.AddScoped<IClaimsTransformation, ClaimProvider>();
 
             services.AddControllersWithViews();
 

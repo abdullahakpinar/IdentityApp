@@ -1,0 +1,28 @@
+﻿@model IdentityApp.ViewModels.RoleViewModel
+
+@{
+    ViewData["Title"] = "Rol Ekleme";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<h2>Rol Ekleme</h2>
+<hr />
+<div class="row">
+    <div class="col-md-4">
+        @if (ViewBag.Status == true)
+        {
+            <div class="alert alert-info">Rol eklenmiştir.</div>
+        }
+        <form asp-action="CreateRole" method="post">
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+            <div class="form-group">
+                <label asp-for="Name" class="control-label"></label>
+                <input asp-for="Name" class="form-control" />
+                <span asp-validation-for="Name" class="text-danger"></span>
+            </div>
+            <div class="form-group">
+                <input type="submit" value="Rol Ekle" class="btn btn-primary" />
+            </div>
+        </form>
+    </div>
+</div>

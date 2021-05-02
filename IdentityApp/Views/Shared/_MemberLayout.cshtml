@@ -23,7 +23,16 @@
                         <a class="nav-link active" aria-current="page" asp-controller="Home" asp-action="Index">Ana Sayfa</a>
                     </li>
                     <li class="nav-item">
-                        <a class="nav-link active" aria-current="page" asp-controller="Member" asp-action="Index">Üye Ana Sayfa</a>
+                        <a class="nav-link" aria-current="page" asp-controller="Member" asp-action="Index">Üye Ana Sayfa</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" aria-current="page" asp-controller="Admin" asp-action="Index">Admin Ana Sayfa</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" aria-current="page" asp-controller="Member" asp-action="Manager">Yönetici Ana Sayfa</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" aria-current="page" asp-controller="Member" asp-action="Editor">Editör Ana Sayfa</a>
                     </li>
                 </ul>
             </div>
@@ -37,6 +46,9 @@
             </div>
             <div class="col-md-4">
                 <h3>Menü</h3>
+                <a class="btn btn-primary btn-block" asp-controller="Member" asp-action="ExchangeRedirect">Ücretli</a>
+                <a class="btn btn-primary btn-block" asp-controller="Member" asp-action="OnlySomeCity">Şehir</a>
+                <a class="btn btn-danger btn-block" asp-controller="Member" asp-action="Violence">Yaş Sınırı</a>
                 <a class="btn btn-info btn-block" asp-controller="Member" asp-action="ChangePassword">Şifre Değiştirme</a>
                 <a class="btn btn-info btn-block" asp-controller="Member" asp-action="EditUser">Bilgi Güncelleme</a>
                 <a class="btn btn-info btn-block" asp-controller="Member" asp-action="LogOut" asp-route-returnUrl="/Home/Index">Çıkış Yap</a>

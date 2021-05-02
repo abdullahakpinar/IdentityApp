@@ -1,0 +1,38 @@
+﻿@model List<UserApp>
+
+@{
+    ViewData["Title"] = "Users";
+    Layout = "~/Views/Shared/_AdminLayout.cshtml";
+}
+
+<h3>Kullanıcılar</h3>
+<table class="table table-bordered table-striped">
+    <tr>
+        <td>User Id</td>
+        <td>User Name</td>
+        <td>Email</td>
+        <td>Roller</td>
+        <td>Rol Atama</td>
+        <td>Şifre İşlemleri</td>
+    </tr>
+    @if (Model == null || Model.Count < 1)
+    {
+        <tr>
+            <td colspan="3">Kullanıcı bulunmamaktadır.</td>
+        </tr>
+    }
+    else
+    {
+        @foreach (UserApp user in Model)
+        {
+            <tr>
+                <td>@user.Id</td>
+                <td>@user.UserName</td>
+                <td>@user.Email</td>
+                <td user-roles="@user.Id"></td>
+                <td><a class="btn btn-dark" asp-action="AssignRole" asp-route-id="@user.Id">Rol Atama</a></td>
+                <td><a class="btn btn-danger" asp-action="ResetUserPassword" asp-route-id="@user.Id">Şifre Yenileme</a></td>
+            </tr>
+        }
+    }
+</table>
