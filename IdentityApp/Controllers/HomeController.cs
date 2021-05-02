@@ -1,6 +1,9 @@
-﻿using IdentityApp.Models;
+﻿using IdentityApp.Enums;
+using IdentityApp.Models;
+using IdentityApp.Services.TwoFactorServices;
 using IdentityApp.ViewModels;
 using Mapster;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 using System;
@@ -13,8 +16,10 @@ namespace IdentityApp.Controllers
 {
     public class HomeController : BaseController
     {
-        public HomeController(UserManager<UserApp> userManager, SignInManager<UserApp> signInManager) : base(userManager, signInManager)
+        private readonly TwoFactorService _twoFactorService;
+        public HomeController(UserManager<UserApp> userManager, SignInManager<UserApp> signInManager, TwoFactorService twoFactorService) : base(userManager, signInManager)
         {
+            _twoFactorService = twoFactorService;
         }
 
         public IActionResult Index()
@@ -26,7 +31,7 @@ namespace IdentityApp.Controllers
             return View();
         }
 
-        public IActionResult LogIn(string returnUrl)
+        public IActionResult LogIn(string returnUrl = "/")
         {
             TempData["ReturnUrl"] = returnUrl;
             return View();
@@ -51,18 +56,33 @@ namespace IdentityApp.Controllers
                         ModelState.AddModelError(string.Empty, "E-postanızı doğrulanmamıştır. Lütfen e-postanızı doğrulayınız.");
                         return View(logInViewModel);
                     }
-                    await SignInManager.SignOutAsync();
 
-                    Microsoft.AspNetCore.Identity.SignInResult result = await SignInManager.PasswordSignInAsync(user, logInViewModel.Password, logInViewModel.RememberMe, false);
-                    if (result.Succeeded)
+                    bool userCheck = await UserManager.CheckPasswordAsync(user, logInViewModel.Password);
+                    if (userCheck)
                     {
                         await UserManager.ResetAccessFailedCountAsync(user);
-
-                        if (TempData["ReturnUrl"] != null)
+                        await SignInManager.SignOutAsync();
+                        Microsoft.AspNetCore.Identity.SignInResult result = await SignInManager.PasswordSignInAsync(user, logInViewModel.Password, logInViewModel.RememberMe, false);
+                        if (result.RequiresTwoFactor)
                         {
-                            return Redirect(TempData["ReturnUrl"].ToString());
+                            if (user.TwoFactorAuthType == (sbyte)TwoFactorAuthTypes.Email || user.TwoFactorAuthType == (sbyte)TwoFactorAuthTypes.SMS)
+                            {
+                                HttpContext.Session.Remove("CurrentTime");
+                            }
+                            if (TempData["ReturnUrl"] != null)
+                            {
+                                return RedirectToAction("LoginTwoFactor", "Home", new { returnUrl = TempData["ReturnUrl"].ToString() });
+                            }
+                            return RedirectToAction("LoginTwoFactor");
                         }
-                        return RedirectToAction("Index", "Member");
+                        else if (result.Succeeded)
+                        {
+                            if (TempData["ReturnUrl"] != null)
+                            {
+                                return Redirect(TempData["ReturnUrl"].ToString());
+                            }
+                            return RedirectToAction("Index", "Member");
+                        }
                     }
                     else
                     {
@@ -85,6 +105,104 @@ namespace IdentityApp.Controllers
                 }
             }
             return View(logInViewModel);
+        }
+
+        public async Task<IActionResult> LoginTwoFactor(string returnURL)
+        {
+            var user = await SignInManager.GetTwoFactorAuthenticationUserAsync();
+
+            TempData["ReturnUrl"] = returnURL;
+            switch ((TwoFactorAuthTypes)user.TwoFactorAuthType)
+            {
+                case TwoFactorAuthTypes.SMS:
+                    if (_twoFactorService.TimeLeft(HttpContext) == 0)
+                    {
+                        if (TempData["ReturnUrl"] != null)
+                        {
+                            return Redirect(TempData["ReturnUrl"].ToString());
+                        }
+                        return RedirectToAction("Index", "LogIn");
+                    }
+                    ViewBag.TimeLeft = _twoFactorService.TimeLeft(HttpContext);
+                    HttpContext.Session.SetString("CodeVerification", _twoFactorService.SendSMS(user.PhoneNumber));
+                    break;
+                case TwoFactorAuthTypes.Email:
+                    if (_twoFactorService.TimeLeft(HttpContext) == 0)
+                    {
+                        if (TempData["ReturnUrl"] != null)
+                        {
+                            return Redirect(TempData["ReturnUrl"].ToString());
+                        }
+                        return RedirectToAction("Index", "LogIn");
+                    }
+                    ViewBag.TimeLeft = _twoFactorService.TimeLeft(HttpContext);
+                    HttpContext.Session.SetString("CodeVerification", _twoFactorService.SendMail(user.Email));
+                    break;
+            }
+            return View(new LoginTwoFactorViewModel() { TwoFactorType = (TwoFactorAuthTypes)user.TwoFactorAuthType });
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> LoginTwoFactor(LoginTwoFactorViewModel loginViewModel)
+        {
+            var user = await SignInManager.GetTwoFactorAuthenticationUserAsync();
+            ModelState.Clear();
+            bool isSuccessAuthentication = false;
+            if ((TwoFactorAuthTypes)user.TwoFactorAuthType == TwoFactorAuthTypes.MicrosoftGoogle)
+            {
+                Microsoft.AspNetCore.Identity.SignInResult result;
+
+                if (loginViewModel.IsRecoverCode)
+                {
+                    result = await SignInManager.TwoFactorRecoveryCodeSignInAsync(loginViewModel.VerificationCode);
+                }
+                else
+                {
+                    result = await SignInManager.TwoFactorAuthenticatorSignInAsync(loginViewModel.VerificationCode, loginViewModel.IsRememberMe, false);
+                }
+                if (result.Succeeded)
+                {
+                    isSuccessAuthentication = true;
+                }
+                else
+                {
+                    ModelState.AddModelError(string.Empty, "Doğrulama kodunu kontrol ediniz.");
+                }
+            }
+            else if ((TwoFactorAuthTypes)user.TwoFactorAuthType == TwoFactorAuthTypes.Email || (TwoFactorAuthTypes)user.TwoFactorAuthType == TwoFactorAuthTypes.SMS)
+            {
+                ViewBag.TimeLeft = _twoFactorService.TimeLeft(HttpContext);
+
+                int timeLeft = ViewBag.TimeLeft;
+                if (timeLeft >= 0)
+                {
+                    if (loginViewModel.VerificationCode == HttpContext.Session.GetString("CodeVerification"))
+                    {
+                        await SignInManager.SignOutAsync();
+                        await SignInManager.SignInAsync(user, loginViewModel.IsRememberMe);
+                        HttpContext.Session.Remove("CurrentTime");
+                        HttpContext.Session.Remove("CodeVerification");
+                        isSuccessAuthentication = true;
+                    }
+                    else
+                    {
+                        ModelState.AddModelError(string.Empty, "Doğrulama kodunu kontrol ediniz.");
+                    }
+                }
+                if (TempData["ReturnUrl"] != null)
+                {
+                    return Redirect(TempData["ReturnUrl"].ToString());
+                }
+            }
+            if (isSuccessAuthentication)
+            {
+                if (TempData["ReturnUrl"] != null)
+                {
+                    return Redirect(TempData["ReturnUrl"].ToString());
+                }
+            }
+            loginViewModel.TwoFactorType = (TwoFactorAuthTypes)user.TwoFactorAuthType;
+            return View(loginViewModel);
         }
 
         public IActionResult SignUp()
@@ -119,7 +237,7 @@ namespace IdentityApp.Controllers
                         userId = appUser.Id,
                         token = confirmationToken
                     }, protocol: HttpContext.Request.Scheme);
-                    Helpers.MailSender.SendMail(user.Email, "Email Doğrulama", emailConfirmURL);
+                    //  Helpers.MailSender.SendMail(user.Email, "Email Doğrulama", emailConfirmURL);
                     return RedirectToAction("LogIn");
                 }
                 else
@@ -133,26 +251,35 @@ namespace IdentityApp.Controllers
 
         public IActionResult ResetPassword()
         {
+            TempData["PasswordResetStatus"] = null;
             return View();
         }
 
         [HttpPost]
         public IActionResult ResetPassword(ResetPasswordViewModel resetPasswordViewModel)
         {
-            UserApp user = UserManager.FindByEmailAsync(resetPasswordViewModel.Email).Result;
-            if (user != null)
+            if (TempData["PasswordResetStatus"] == null)
             {
-                string passwordResetToken = UserManager.GeneratePasswordResetTokenAsync(user).Result;
-                string passwordResetLink = Url.Action("ResetPasswordConfirm", "Home", new { userId = user.Id, token = passwordResetToken }, HttpContext.Request.Scheme);
-                Helpers.MailSender.SendMail(user.Email, "Şifre Yenileme", passwordResetLink);
-                ViewBag.Status = "Successful";
+                UserApp user = UserManager.FindByEmailAsync(resetPasswordViewModel.Email).Result;
+                if (user != null)
+                {
+
+                    string passwordResetToken = UserManager.GeneratePasswordResetTokenAsync(user).Result;
+                    string passwordResetLink = Url.Action("ResetPasswordConfirm", "Home", new { userId = user.Id, token = passwordResetToken }, HttpContext.Request.Scheme);
+                    Helpers.MailSender.SendMail(user.Email, "Şifre Yenileme", passwordResetLink);
+                    ViewBag.Status = "Successful";
+                    TempData["PasswordResetStatus"] = true.ToString();
+                }
+                else
+                {
+                    ModelState.AddModelError(string.Empty, $"{resetPasswordViewModel.Email} adresi sistemde bulunamamıştır.");
+                }
+                return View(resetPasswordViewModel);
             }
             else
             {
-                ModelState.AddModelError(string.Empty, $"{resetPasswordViewModel.Email} adresi sistemde bulunamamıştır.");
+                return RedirectToAction("ResetPassword");
             }
-
-            return View(resetPasswordViewModel);
         }
 
         public IActionResult ResetPasswordConfirm(string userId, string token)
@@ -212,7 +339,6 @@ namespace IdentityApp.Controllers
             return View();
         }
 
-
         public IActionResult LoginFacebook(string returnURL)
         {
             string redirectURL = Url.Action("ExternalResponse", "Home", new { returnURL = returnURL });
@@ -238,7 +364,7 @@ namespace IdentityApp.Controllers
         }
 
 
-        public async Task<IActionResult> ExternalResponse(string returnURL = "/") 
+        public async Task<IActionResult> ExternalResponse(string returnURL = "/")
         {
             ExternalLoginInfo userInfo = await SignInManager.GetExternalLoginInfoAsync();
             if (userInfo == null)
@@ -320,6 +446,21 @@ namespace IdentityApp.Controllers
         public ActionResult Error()
         {
             return View();
+        }
+
+        [HttpGet]
+        public JsonResult AgainSendEmailForAuthentication()
+        {
+            try
+            {
+                var user = SignInManager.GetTwoFactorAuthenticationUserAsync().Result;
+                HttpContext.Session.SetString("CodeVerification", _twoFactorService.SendMail(user.Email));
+                return Json(true);
+            }
+            catch
+            {
+                return Json(false);
+            }
         }
 
     }

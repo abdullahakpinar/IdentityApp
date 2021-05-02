@@ -14,5 +14,8 @@ namespace IdentityApp.Models
         public string PictureURL { get; set; }
         public DateTime? BirthDate { get; set; }
         public int Gender { get; set; }
+
+        public sbyte TwoFactorAuthType { get; set; }
+
     }
 }

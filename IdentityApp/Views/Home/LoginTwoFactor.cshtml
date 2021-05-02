@@ -1,0 +1,115 @@
+﻿@model LoginTwoFactorViewModel
+@{
+    ViewData["Title"] = "LoginTwoFactor";
+}
+
+@section Scripts
+{
+    <script type="text/javascript">
+
+
+        $("#SendMail").click(() => {
+            $.ajax({
+                type: "GET",
+                contentType: "application/json; charset=utf-8",
+                url: "./AgainSendEmailForAuthentication",
+                dataType: "json",
+                success: function (response) {
+                    if (response == true) {
+                        alert("Doğrulama kodu tekrar gönderilmiştir.");
+                    }
+                    else {
+                        alert("Doğrulama kodu gönderilirken hata oluştu.");
+                    }
+                },
+                error: function () {
+                    alert("Doğrulama kodu gönderilirken hata oluştu.");
+                }
+            });
+        });
+
+
+        $(document).ready(() =>
+        {
+            var timeLeft = parseInt("@ViewBag.TimeLeft")
+            function makeTimer()
+            {
+                var minutes = Math.floor(timeLeft / 60);
+                var seconds = Math.floor(timeLeft - (minutes * 60));
+                if (minutes < 5){
+                    minutes = "0" + minutes;
+                }
+                if (seconds < 5) {
+                    seconds = "0" + seconds;
+                }
+                $("#minutes").html(minutes);
+                $("#seconds").html(seconds);
+                timeLeft--;
+                if (timeLeft == 0) {
+                    window.location.href = "/Home/Login";
+                }
+            }
+
+            makeTimer();
+            setInterval(() => makeTimer(), 1000);
+        });
+    </script>
+}
+
+<div class="row">
+    <div class="col-md-4 offset-md-4">
+        <h4>İki Adımlı Doğrulama</h4>
+        <hr />
+        <form asp-action="LoginTwoFactor" method="post">
+            <div asp-validation-summary="ModelOnly" class="text-danger"></div>
+            <div class="form-group">
+                <label asp-for="VerificationCode"></label>
+                <input asp-for="VerificationCode" class="form-control" />
+                <span asp-validation-for="VerificationCode" class="text-danger"></span>
+            </div>
+            <div class="form-group form-check">
+                <input type="checkbox" asp-for="IsRememberMe" class="form-check-input" />
+                <label class="form-check-label" asp-for="IsRememberMe">Beni Hatırla</label>
+            </div>
+            @if (Model.TwoFactorType == TwoFactorAuthTypes.MicrosoftGoogle)
+            {
+                <div class="form-group form-check">
+                    <input type="checkbox" asp-for="IsRecoverCode" class="form-check-input" />
+                    <label class="form-check-label" asp-for="IsRecoverCode">Kurtarma kodlarını kullanmak istiyorum.</label>
+                </div>
+            }
+
+        <div class="form-group">
+            <input type="submit" value="Gönder" class="btn btn-primary" />
+            @if (Model.TwoFactorType == TwoFactorAuthTypes.Email || Model.TwoFactorType == TwoFactorAuthTypes.SMS)
+            {
+                <input type="button" value="Kodu Tekrar Gönder" class="btn btn-success float-right" id="SendMail" />
+            }
+        </div>
+        </form>
+        @if (Model.TwoFactorType == TwoFactorAuthTypes.Email || Model.TwoFactorType == TwoFactorAuthTypes.SMS)
+        {
+            <div class="alert alert-primary">
+                <span class="text-primary" id="minutes"></span> Dakika <span class="text-primary" id="seconds"></span> Saniye Kaldı
+            </div>
+        }
+        <div class="alert alert-info">
+            @switch (Model.TwoFactorType)
+            {
+                case TwoFactorAuthTypes.SMS:
+                    <span>Telefonunuza SMS olarak gelen kodu giriniz.</span>
+                    break;
+                case TwoFactorAuthTypes.Email:
+                    <span>E-posta hesabınıza gelen kodu giriniz.</span>
+                    break;
+                case TwoFactorAuthTypes.MicrosoftGoogle:
+                    <span>Uygulamada size verilen kodu giriniz.</span>
+                    break;
+                default:
+                    break;
+            }
+        </div>
+
+    </div>
+</div>
+

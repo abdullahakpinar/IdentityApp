@@ -163,8 +163,10 @@ namespace IdentityApp.Controllers
             UserApp user = await GetUserByIdAsync(id);
             if (user != null)
             {
-                ResetUserPasswordByAdminViewModel resetUserPassword = new ResetUserPasswordByAdminViewModel();
-                resetUserPassword.UserId = user.Id;
+                ResetUserPasswordByAdminViewModel resetUserPassword = new ResetUserPasswordByAdminViewModel
+                {
+                    UserId = user.Id
+                };
                 return View(resetUserPassword);
             }
             return RedirectToAction("Users");

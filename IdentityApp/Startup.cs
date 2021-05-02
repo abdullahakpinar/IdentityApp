@@ -2,6 +2,7 @@
 using IdentityApp.CustomValidations;
 using IdentityApp.Models;
 using IdentityApp.Requirements;
+using IdentityApp.Services.TwoFactorServices;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Builder;
@@ -30,6 +31,8 @@ namespace IdentityApp
 
         public void ConfigureServices(IServiceCollection services)
         {
+            services.Configure<TwoFactorOptions>(Configuration.GetSection("TwoFactorOptions"));
+            services.AddScoped<TwoFactorService>();
             services.AddTransient<IAuthorizationHandler, ExpireDateExchangeHandler>();
             services.AddDbContext<AppIdentityDbContext>(options =>
             {
@@ -103,6 +106,12 @@ namespace IdentityApp
 
             services.AddScoped<IClaimsTransformation, ClaimProvider>();
 
+            services.AddSession(options =>
+            {
+                options.IdleTimeout = TimeSpan.FromMinutes(30);
+                options.Cookie.Name = "MainSession";
+
+            });
             services.AddControllersWithViews();
 
         }
@@ -114,15 +123,16 @@ namespace IdentityApp
             if (env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();
+                app.UseBrowserLink();
+                app.UseStatusCodePages();
             }
 
             app.UseHttpsRedirection();
             app.UseStaticFiles();
-            app.UseStatusCodePages();
             app.UseRouting();
             app.UseAuthentication();
             app.UseAuthorization();
-
+            app.UseSession();
             app.UseEndpoints(endpoints =>
             {
                 endpoints.MapControllerRoute(

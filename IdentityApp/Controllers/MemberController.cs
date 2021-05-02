@@ -13,15 +13,17 @@ using IdentityApp.Enums;
 using Microsoft.AspNetCore.Http;
 using System.IO;
 using System.Security.Claims;
+using IdentityApp.Services.TwoFactorServices;
 
 namespace IdentityApp.Controllers
 {
     [Authorize]
     public class MemberController : BaseController
-    { 
-
-        public MemberController(UserManager<UserApp> userManager, SignInManager<UserApp> signInManager) : base(userManager, signInManager)
-        { 
+    {
+        private readonly TwoFactorService _twoFactorService;
+        public MemberController(UserManager<UserApp> userManager, SignInManager<UserApp> signInManager, TwoFactorService twoFactorService) : base(userManager, signInManager)
+        {
+            _twoFactorService = twoFactorService;
         }
 
         public IActionResult Index()
@@ -39,7 +41,7 @@ namespace IdentityApp.Controllers
         }
 
         [HttpPost]
-        public IActionResult ChangePassword(ChangePasswordViewModel changePasswordViewModel)
+        public async Task<IActionResult> ChangePassword(ChangePasswordViewModel changePasswordViewModel)
         {
 
             if (ModelState.IsValid)
@@ -55,10 +57,10 @@ namespace IdentityApp.Controllers
                             IdentityResult result = UserManager.ChangePasswordAsync(user, changePasswordViewModel.PasswordOld, changePasswordViewModel.PasswordNew).Result;
                             if (result.Succeeded)
                             {
-                                UserManager.UpdateSecurityStampAsync(user);
+                                await UserManager.UpdateSecurityStampAsync(user);
                                 //SignOut After LogIn
-                                SignInManager.SignOutAsync();
-                                SignInManager.PasswordSignInAsync(user.UserName, changePasswordViewModel.PasswordNew, true, false);
+                                await SignInManager.SignOutAsync();
+                                await SignInManager.PasswordSignInAsync(user.UserName, changePasswordViewModel.PasswordNew, true, false);
 
                                 ViewBag.Status = true;
                             }
@@ -168,7 +170,7 @@ namespace IdentityApp.Controllers
         }
 
 
-        [Authorize(Roles ="Editor,Admin")]
+        [Authorize(Roles = "Editor,Admin")]
         public IActionResult Editor()
         {
             return View();
@@ -208,6 +210,91 @@ namespace IdentityApp.Controllers
         [Authorize(Policy = "ExchangePolicy")]
         public IActionResult Exchange()
         {
+            return View();
+        }
+
+        public IActionResult TwoFactorAuthentication()
+        {
+            return View(new AuthenticatorViewModel() { TwoFactorTypes = (TwoFactorAuthTypes)CurrentUser.TwoFactorAuthType });
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> TwoFactorAuthentication(AuthenticatorViewModel authenticatorViewModel)
+        {
+            switch (authenticatorViewModel.TwoFactorTypes)
+            {
+                case TwoFactorAuthTypes.None:
+                    CurrentUser.TwoFactorEnabled = false;
+                    TempData["TwoFactorTypeMessage"] = "İki adımlı kimlik doğrulama aktif değildir.";
+                    break;
+                case TwoFactorAuthTypes.SMS:
+                    if (string.IsNullOrEmpty(CurrentUser.PhoneNumber))
+                    {
+                        CurrentUser.TwoFactorEnabled = false;
+                        ViewBag.Message = "Telefon numaranız sistemde kayıtlı olmadığı için SMS ile doğrulama yapamazsınız.";
+                    }
+                    else
+                    {
+                        CurrentUser.TwoFactorEnabled = true;
+                        TempData["TwoFactorTypeMessage"] = "İki adımlı kimlik doğrulama SMS olarak aktif hale getirilmiştir.";
+                    }
+                    break;
+                case TwoFactorAuthTypes.Email:
+                    CurrentUser.TwoFactorEnabled = true;
+                    TempData["TwoFactorTypeMessage"] = "İki adımlı kimlik doğrulama email olarak aktif hale getirilmiştir.";
+                    break;
+                case TwoFactorAuthTypes.MicrosoftGoogle:
+                    return RedirectToAction("TwoFactorWithAuthenticator");
+                default:
+                    break;
+            } 
+            CurrentUser.TwoFactorAuthType = (sbyte)authenticatorViewModel.TwoFactorTypes;
+            IdentityResult result = await UserManager.UpdateAsync(CurrentUser);
+            if (!result.Succeeded)
+            {
+                AddModelError(result);
+            }
+            return View(authenticatorViewModel);
+        }
+
+        public async Task<IActionResult> TwoFactorWithAuthenticator()
+        {
+            string unFormattedKey = await UserManager.GetAuthenticatorKeyAsync(CurrentUser);
+            if (string.IsNullOrEmpty(unFormattedKey))
+            {
+                await UserManager.ResetAuthenticatorKeyAsync(CurrentUser);
+                unFormattedKey = await UserManager.GetAuthenticatorKeyAsync(CurrentUser);
+            }
+            AuthenticatorViewModel authenticatorViewModel = new AuthenticatorViewModel()
+            {
+                SharedKey = unFormattedKey,
+                AuthenticatorUri = _twoFactorService.GenerateQRCodeUri(CurrentUser.Email, unFormattedKey)
+            };
+
+            return View(authenticatorViewModel);
+        }
+
+        [HttpPost]
+        public async Task<IActionResult> TwoFactorWithAuthenticator(AuthenticatorViewModel authenticatorViewModel)
+        {
+
+            var verificationCode = authenticatorViewModel.VerificationCode.Replace(" ", string.Empty).Replace("-", string.Empty).Replace("_", string.Empty);
+
+            bool is2FATokenValid = await UserManager.VerifyTwoFactorTokenAsync(CurrentUser, UserManager.Options.Tokens.AuthenticatorTokenProvider, verificationCode);
+
+            if (is2FATokenValid)
+            {
+                CurrentUser.TwoFactorEnabled = true;
+                CurrentUser.TwoFactorAuthType = (sbyte)TwoFactorAuthTypes.MicrosoftGoogle;
+                var recoveryCodes = await UserManager.GenerateNewTwoFactorRecoveryCodesAsync(CurrentUser, 5);
+                TempData["TwoFactorRecoveryCodes"] = recoveryCodes;
+                TempData["TwoFactorTypeMessage"] = "İki adımlı doğrulama başarı ile sağlanmıştır.";
+                return RedirectToAction("TwoFactorAuthentication");
+            }
+            else
+            {
+                ModelState.AddModelError(string.Empty, "Girilen doğrulama kodu yanlıştır.");
+            }
             return View();
         }
     }

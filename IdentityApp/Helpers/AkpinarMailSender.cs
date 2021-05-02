@@ -40,7 +40,7 @@ namespace IdentityApp.Helpers
             }
         }
 
-        private void CheckRequiredField(SendMailRequest request)
+        private static void CheckRequiredField(SendMailRequest request)
         {
             if (string.IsNullOrEmpty(request.SenderMailAddress))
             {
